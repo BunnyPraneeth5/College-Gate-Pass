@@ -57,28 +57,21 @@ class GatePassListView(generics.ListAPIView):
         
         # Role-based filtering
         if user.role == 'student':
-            # Students see only their own passes
             queryset = queryset.filter(student=user)
         
-        elif user.role == 'security':
-            # Security sees only approved passes (for gate verification)
-            queryset = queryset.filter(status='approved')
-        
         elif user.role in ['faculty', 'class_incharge', 'hod']:
-            # Faculty, Class Incharge, HOD see passes of students in their department
-            # Filter by student's department matching the user's department
             if user.department:
                 queryset = queryset.filter(student__department=user.department)
             else:
-                # If no department set, show nothing (safety measure)
                 queryset = queryset.none()
         
         elif user.role in ['principal', 'admin']:
-            # Principal and Admin see all passes
             pass  # No filtering needed
         
+        elif user.role == 'security':
+            queryset = queryset.filter(status='approved')
+        
         else:
-            # Unknown role - show nothing
             queryset = queryset.none()
         
         # Additional filters from query params
