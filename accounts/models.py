@@ -2,6 +2,19 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 
 
+# Fixed department choices
+DEPARTMENT_CHOICES = [
+    ('CSE', 'Computer Science & Engineering'),
+    ('CAI', 'Computer Science & AI'),
+    ('CSD', 'Computer Science & Data Science'),
+    ('EEE', 'Electrical & Electronics Engineering'),
+    ('ECE', 'Electronics & Communication Engineering'),
+    ('MEC', 'Mechanical Engineering'),
+    ('CIV', 'Civil Engineering'),
+    ('H&S', 'Humanities & Sciences'),
+]
+
+
 class UserManager(BaseUserManager):
     """Custom user manager for email-based authentication."""
     
@@ -44,7 +57,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
-    department = models.CharField(max_length=100, blank=True)
+    department = models.CharField(max_length=10, choices=DEPARTMENT_CHOICES, blank=True)
     phone = models.CharField(max_length=15, blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -95,8 +108,9 @@ class StudentProfile(models.Model):
     class_name = models.CharField(max_length=50)  # e.g., "B.Tech CSE"
     section = models.CharField(max_length=10)  # e.g., "A", "B"
     year = models.IntegerField()  # 1, 2, 3, 4
-    residency_type = models.CharField(max_length=15, choices=RESIDENCY_CHOICES, default='DAY_SCHOLAR')  # Required field
+    residency_type = models.CharField(max_length=15, choices=RESIDENCY_CHOICES, default='DAY_SCHOLAR')
     parent_phone = models.CharField(max_length=15)
+    parent_email = models.EmailField(blank=True)  # For notifications
     address = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -107,3 +121,30 @@ class StudentProfile(models.Model):
     class Meta:
         verbose_name = 'Student Profile'
         verbose_name_plural = 'Student Profiles'
+
+
+class ClassAssignment(models.Model):
+    """Model for assigning class in-charges to specific classes per semester."""
+    
+    incharge = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='class_assignments',
+        limit_choices_to={'role__in': ['class_incharge', 'faculty']}
+    )
+    department = models.CharField(max_length=10, choices=DEPARTMENT_CHOICES)
+    year = models.IntegerField()  # 1, 2, 3, 4
+    section = models.CharField(max_length=10)  # A, B, C
+    semester = models.IntegerField()  # 1-8
+    academic_year = models.CharField(max_length=10)  # e.g., "2024-25"
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Class Assignment'
+        verbose_name_plural = 'Class Assignments'
+        unique_together = ['department', 'year', 'section', 'semester', 'academic_year']
+    
+    def __str__(self):
+        return f"{self.department} Year-{self.year} Sec-{self.section} Sem-{self.semester} - {self.incharge.full_name}"

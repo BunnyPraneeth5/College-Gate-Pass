@@ -19,6 +19,13 @@ from .permissions import (
     CanViewGatePass
 )
 
+# Import notification utility
+try:
+    from notifications.utils import send_pass_notification
+except ImportError:
+    def send_pass_notification(gate_pass, action):
+        pass  # Fallback if notifications app not yet configured
+
 
 class GatePassCreateView(generics.CreateAPIView):
     """API endpoint for students to create gate pass requests."""
@@ -40,12 +47,7 @@ class GatePassCreateView(generics.CreateAPIView):
 class GatePassListView(generics.ListAPIView):
     """
     API endpoint to list gate passes.
-    
-    Results are filtered based on user role:
-    - student: Only their own GatePass records
-    - faculty, class_incharge, hod: Passes of students in their department
-    - principal, admin: All passes
-    - security: Only passes with status == 'approved' (for gate verification)
+    Filtered by role.
     """
     
     serializer_class = GatePassListSerializer
@@ -55,39 +57,34 @@ class GatePassListView(generics.ListAPIView):
         user = self.request.user
         queryset = GatePass.objects.select_related('student', 'approved_by')
         
-        # Role-based filtering
         if user.role == 'student':
             queryset = queryset.filter(student=user)
-        
         elif user.role in ['faculty', 'class_incharge', 'hod']:
             if user.department:
                 queryset = queryset.filter(student__department=user.department)
             else:
                 queryset = queryset.none()
-        
         elif user.role in ['principal', 'admin']:
-            pass  # No filtering needed
-        
+            pass
         elif user.role == 'security':
             queryset = queryset.filter(status='approved')
-        
         else:
             queryset = queryset.none()
         
-        # Additional filters from query params
-        status_filter = self.request.query_params.get('status', None)
+        # Query param filters
+        status_filter = self.request.query_params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         
-        pass_type = self.request.query_params.get('pass_type', None)
+        pass_type = self.request.query_params.get('pass_type')
         if pass_type:
             queryset = queryset.filter(pass_type=pass_type)
         
-        date_from = self.request.query_params.get('date_from', None)
+        date_from = self.request.query_params.get('date_from')
         if date_from:
             queryset = queryset.filter(out_datetime__date__gte=date_from)
         
-        date_to = self.request.query_params.get('date_to', None)
+        date_to = self.request.query_params.get('date_to')
         if date_to:
             queryset = queryset.filter(out_datetime__date__lte=date_to)
         
@@ -109,11 +106,8 @@ class GatePassApproveView(views.APIView):
     
     def post(self, request, pk):
         gate_pass = get_object_or_404(GatePass, pk=pk)
-        
-        # Check object-level permission
         self.check_object_permissions(request, gate_pass)
         
-        # Validate the gate pass can be approved
         if gate_pass.status != 'pending':
             return Response({
                 'error': f'Gate pass is already {gate_pass.status}.'
@@ -122,11 +116,13 @@ class GatePassApproveView(views.APIView):
         serializer = GatePassApprovalSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Approve the gate pass
         gate_pass.status = 'approved'
         gate_pass.approved_by = request.user
         gate_pass.approver_comment = serializer.validated_data.get('comment', '')
         gate_pass.save()
+        
+        # Send notification
+        send_pass_notification(gate_pass, 'approved')
         
         return Response({
             'message': 'Gate pass approved successfully.',
@@ -141,11 +137,8 @@ class GatePassRejectView(views.APIView):
     
     def post(self, request, pk):
         gate_pass = get_object_or_404(GatePass, pk=pk)
-        
-        # Check object-level permission
         self.check_object_permissions(request, gate_pass)
         
-        # Validate the gate pass can be rejected
         if gate_pass.status != 'pending':
             return Response({
                 'error': f'Gate pass is already {gate_pass.status}.'
@@ -154,11 +147,13 @@ class GatePassRejectView(views.APIView):
         serializer = GatePassApprovalSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Reject the gate pass
         gate_pass.status = 'rejected'
         gate_pass.approved_by = request.user
         gate_pass.approver_comment = serializer.validated_data.get('comment', '')
         gate_pass.save()
+        
+        # Send notification
+        send_pass_notification(gate_pass, 'rejected')
         
         return Response({
             'message': 'Gate pass rejected.',
@@ -174,25 +169,20 @@ class GatePassMarkOutView(views.APIView):
     def post(self, request, pk):
         gate_pass = get_object_or_404(GatePass, pk=pk)
         
-        # Validate gate pass status
         if gate_pass.status != 'approved':
             return Response({
                 'error': 'Gate pass is not approved.'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check if already marked out
-        existing_out = gate_pass.logs.filter(action='OUT').exists()
-        if existing_out:
+        if gate_pass.logs.filter(action='OUT').exists():
             return Response({
                 'error': 'Student has already exited.'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Validate gate pass is within valid time window
         now = timezone.now()
         if now < gate_pass.out_datetime:
             return Response({
-                'error': 'Gate pass is not yet valid. Valid from: ' + 
-                         gate_pass.out_datetime.strftime('%Y-%m-%d %H:%M')
+                'error': f'Gate pass not yet valid. Valid from: {gate_pass.out_datetime.strftime("%Y-%m-%d %H:%M")}'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         if now > gate_pass.in_datetime:
@@ -205,13 +195,15 @@ class GatePassMarkOutView(views.APIView):
         serializer = SecurityScanSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Create log entry
         log = GateLog.objects.create(
             gate_pass=gate_pass,
             action='OUT',
             marked_by=request.user,
             notes=serializer.validated_data.get('notes', '')
         )
+        
+        # Send notification
+        send_pass_notification(gate_pass, 'out')
         
         return Response({
             'message': 'Exit marked successfully.',
@@ -228,22 +220,17 @@ class GatePassMarkInView(views.APIView):
     def post(self, request, pk):
         gate_pass = get_object_or_404(GatePass, pk=pk)
         
-        # Validate gate pass status
         if gate_pass.status not in ['approved', 'used']:
             return Response({
                 'error': 'Gate pass is not valid.'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check if already marked out
-        existing_out = gate_pass.logs.filter(action='OUT').exists()
-        if not existing_out:
+        if not gate_pass.logs.filter(action='OUT').exists():
             return Response({
                 'error': 'Student has not exited yet.'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check if already marked in
-        existing_in = gate_pass.logs.filter(action='IN').exists()
-        if existing_in:
+        if gate_pass.logs.filter(action='IN').exists():
             return Response({
                 'error': 'Student has already returned.'
             }, status=status.HTTP_400_BAD_REQUEST)
@@ -251,7 +238,6 @@ class GatePassMarkInView(views.APIView):
         serializer = SecurityScanSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Create log entry
         log = GateLog.objects.create(
             gate_pass=gate_pass,
             action='IN',
@@ -259,9 +245,11 @@ class GatePassMarkInView(views.APIView):
             notes=serializer.validated_data.get('notes', '')
         )
         
-        # Mark gate pass as used
         gate_pass.status = 'used'
         gate_pass.save()
+        
+        # Send notification
+        send_pass_notification(gate_pass, 'in')
         
         return Response({
             'message': 'Entry marked successfully. Gate pass completed.',
@@ -271,11 +259,34 @@ class GatePassMarkInView(views.APIView):
 
 
 class GatePassScanView(views.APIView):
-    """API endpoint for security to scan QR code and get gate pass info."""
+    """
+    API endpoint for security to scan QR code.
+    Supports both POST with qr_token and GET with ?token= query param
+    """
     
-    permission_classes = [IsAuthenticated, CanMarkEntryExit]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """GET /api/gate-pass/scan/?token=<qr_token>"""
+        qr_token = request.query_params.get('token')
+        if not qr_token:
+            return Response({
+                'error': 'Token query parameter is required.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            gate_pass = GatePass.objects.get(qr_token=qr_token)
+        except GatePass.DoesNotExist:
+            return Response({
+                'error': 'Invalid QR code.'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({
+            'gate_pass': GatePassDetailSerializer(gate_pass).data
+        })
     
     def post(self, request):
+        """POST with qr_token in body"""
         serializer = SecurityScanSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -298,14 +309,7 @@ class GatePassScanView(views.APIView):
 
 
 class PendingApprovalsView(generics.ListAPIView):
-    """
-    API endpoint for approvers to see pending gate passes.
-    
-    Filtering by role:
-    - class_incharge: Only EMERGENCY passes from their department
-    - hod: All pending passes from their department
-    - principal: All pending passes (all departments)
-    """
+    """API endpoint for approvers to see pending gate passes."""
     
     serializer_class = GatePassListSerializer
     permission_classes = [IsAuthenticated, CanApproveGatePass]
@@ -314,23 +318,18 @@ class PendingApprovalsView(generics.ListAPIView):
         user = self.request.user
         queryset = GatePass.objects.filter(status='pending').select_related('student', 'approved_by')
         
-        # Class incharge: only EMERGENCY passes from their department
         if user.role == 'class_incharge':
             queryset = queryset.filter(pass_type='EMERGENCY')
             if user.department:
                 queryset = queryset.filter(student__department=user.department)
             else:
                 queryset = queryset.none()
-        
-        # HOD: all pending passes from their department
         elif user.role == 'hod':
             if user.department:
                 queryset = queryset.filter(student__department=user.department)
             else:
                 queryset = queryset.none()
-        
-        # Principal: sees all pending passes (no department filter)
         elif user.role == 'principal':
-            pass  # No filtering needed
+            pass
         
         return queryset
