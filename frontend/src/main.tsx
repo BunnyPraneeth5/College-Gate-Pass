@@ -9,11 +9,14 @@ import { CreateGatePassPage } from './pages/CreateGatePassPage'
 import { HodDashboard } from './pages/HodDashboard'
 import { PrincipalDashboard } from './pages/PrincipalDashboard'
 import { SecurityDashboard } from './pages/SecurityDashboard'
+import { FacultyDashboard } from './pages/FacultyDashboard'
+import { ClassInchargeDashboard } from './pages/ClassInchargeDashboard'
 import RegisterLandingPage from './pages/RegisterLandingPage'
 import StudentRegisterPage from './pages/StudentRegisterPage'
 import StaffRegisterPage from './pages/StaffRegisterPage'
 import SecurityRegisterPage from './pages/SecurityRegisterPage'
 import './index.css'
+
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -45,20 +48,22 @@ createRoot(document.getElementById('root')!).render(
             }
           />
 
-          {/* HOD / Class Incharge Routes */}
+          {/* HOD Routes */}
           <Route
             path="/hod/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['hod', 'class_incharge']}>
+              <ProtectedRoute allowedRoles={['hod']}>
                 <HodDashboard />
               </ProtectedRoute>
             }
           />
+
+          {/* Class Incharge Routes */}
           <Route
             path="/class-incharge/dashboard"
             element={
               <ProtectedRoute allowedRoles={['class_incharge']}>
-                <HodDashboard />
+                <ClassInchargeDashboard />
               </ProtectedRoute>
             }
           />
@@ -88,7 +93,7 @@ createRoot(document.getElementById('root')!).render(
             path="/faculty/dashboard"
             element={
               <ProtectedRoute allowedRoles={['faculty']}>
-                <HodDashboard />
+                <FacultyDashboard />
               </ProtectedRoute>
             }
           />

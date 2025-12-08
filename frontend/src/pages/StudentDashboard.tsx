@@ -53,11 +53,16 @@ export function StudentDashboard() {
     const fetchPasses = async () => {
         try {
             setIsLoading(true);
+            setError('');
             const response = await gatePassAPI.list();
+            console.log('Gate passes response:', response.data);
             setPasses(response.data);
         } catch (err: any) {
-            setError('Failed to load gate passes');
-            console.error(err);
+            console.error('Failed to fetch gate passes:', err);
+            const errorMessage = err.response?.data?.error
+                || err.response?.data?.detail
+                || 'Failed to load gate passes. Please try again.';
+            setError(errorMessage);
         } finally {
             setIsLoading(false);
         }

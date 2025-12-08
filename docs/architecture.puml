@@ -1,0 +1,113 @@
+@startuml College Gate Pass - System Architecture
+
+!define RECT_COLOR #E1F5FE
+!define DB_COLOR #FFF3E0
+!define API_COLOR #E8F5E9
+
+title College Gate Pass System - Architecture Overview
+
+skinparam rectangle {
+    BackgroundColor RECT_COLOR
+    BorderColor #0288D1
+    RoundCorner 15
+}
+
+skinparam database {
+    BackgroundColor DB_COLOR
+    BorderColor #F57C00
+}
+
+skinparam cloud {
+    BackgroundColor API_COLOR
+    BorderColor #388E3C
+}
+
+' ==================== FRONTEND ====================
+rectangle "Frontend (React + TypeScript)" as frontend {
+    rectangle "Pages" as pages {
+        [LoginPage]
+        [RegisterPages]
+        [StudentDashboard]
+        [HodDashboard]
+        [SecurityDashboard]
+    }
+    
+    rectangle "Components" as components {
+        [Layout]
+        [GatePassCard]
+        [QRCodeDisplay]
+        [QRScanner]
+        [ProtectedRoute]
+    }
+    
+    rectangle "Services" as services {
+        [API Client (Axios)]
+        [AuthContext]
+    }
+}
+
+' ==================== BACKEND ====================
+rectangle "Backend (Django + DRF)" as backend {
+    rectangle "Apps" as apps {
+        package "accounts" {
+            [User Model]
+            [StudentProfile]
+            [Registration Views]
+            [Auth Views]
+        }
+        
+        package "gate_pass" {
+            [GatePass Model]
+            [GateLog Model]
+            [CRUD Views]
+            [Approval Views]
+        }
+        
+        package "attendance" {
+            [AttendanceRecord]
+            [AttendanceEntry]
+            [Upload Views]
+        }
+        
+        package "analytics" {
+            [Summary View]
+            [Department Stats]
+        }
+        
+        package "notifications" {
+            [Email Utils]
+            [send_pass_notification]
+        }
+    }
+}
+
+' ==================== DATABASE ====================
+database "SQLite/PostgreSQL" as db {
+    [users]
+    [student_profiles]
+    [gate_passes]
+    [gate_logs]
+    [attendance_records]
+    [attendance_entries]
+    [class_assignments]
+}
+
+' ==================== EXTERNAL ====================
+cloud "External Services" as external {
+    [Email (SMTP)]
+    [PWA Service Worker]
+}
+
+' ==================== CONNECTIONS ====================
+frontend --> backend : REST API (HTTP)
+backend --> db : Django ORM
+backend --> external : Email notifications
+
+[API Client (Axios)] --> [Auth Views] : /api/auth/*
+[API Client (Axios)] --> [CRUD Views] : /api/gate-pass/*
+[API Client (Axios)] --> [Summary View] : /api/analytics/*
+
+[QRCodeDisplay] ..> [GatePass Model] : displays qr_token
+[QRScanner] ..> [CRUD Views] : scans token
+
+@enduml

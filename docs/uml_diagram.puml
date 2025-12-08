@@ -1,0 +1,170 @@
+@startuml College Gate Pass System
+
+!define ENTITY class
+!define PRIMARY_KEY <<PK>>
+!define FOREIGN_KEY <<FK>>
+
+title College Gate Pass System - Class Diagram
+
+' ==================== ACCOUNTS APP ====================
+package "accounts" {
+    ENTITY User {
+        +id : int PRIMARY_KEY
+        +email : str
+        +first_name : str
+        +last_name : str
+        +role : enum
+        +department : str
+        +phone : str
+        +password : str
+        +is_active : bool
+        +is_staff : bool
+        +created_at : datetime
+        +updated_at : datetime
+        --
+        Roles: student, faculty, class_incharge,
+        hod, principal, security, admin
+    }
+
+    ENTITY StudentProfile {
+        +id : int PRIMARY_KEY
+        +user_id : int FOREIGN_KEY
+        +roll_number : str
+        +class_name : str
+        +section : str
+        +year : int
+        +residency_type : enum
+        +parent_phone : str
+        +parent_email : str
+        +address : str
+        +created_at : datetime
+        +updated_at : datetime
+        --
+        residency: DAY_SCHOLAR, HOSTELLER
+    }
+
+    ENTITY ClassAssignment {
+        +id : int PRIMARY_KEY
+        +incharge_id : int FOREIGN_KEY
+        +department : str
+        +year : int
+        +section : str
+        +semester : int
+        +academic_year : str
+        +active : bool
+        +created_at : datetime
+    }
+}
+
+' ==================== GATE PASS APP ====================
+package "gate_pass" {
+    ENTITY GatePass {
+        +id : int PRIMARY_KEY
+        +student_id : int FOREIGN_KEY
+        +approved_by_id : int FOREIGN_KEY
+        +pass_type : enum
+        +reason : str
+        +out_datetime : datetime
+        +in_datetime : datetime
+        +status : enum
+        +qr_token : str
+        +approver_comment : str
+        +created_at : datetime
+        +updated_at : datetime
+        --
+        types: DAY_OUT, HOME_LEAVE,
+        EMERGENCY, NIGHT_OUT, LONG_LEAVE
+        status: pending, approved, 
+        rejected, expired, used
+    }
+
+    ENTITY GateLog {
+        +id : int PRIMARY_KEY
+        +gate_pass_id : int FOREIGN_KEY
+        +security_id : int FOREIGN_KEY
+        +action : enum
+        +timestamp : datetime
+        +location : str
+        +notes : str
+        --
+        action: OUT, IN
+    }
+}
+
+' ==================== ATTENDANCE APP ====================
+package "attendance" {
+    ENTITY AttendanceRecord {
+        +id : int PRIMARY_KEY
+        +uploaded_by_id : int FOREIGN_KEY
+        +department : str
+        +class_name : str
+        +section : str
+        +date : date
+        +total_students : int
+        +present_count : int
+        +absent_count : int
+        +late_upload : bool
+        +created_at : datetime
+    }
+
+    ENTITY AttendanceEntry {
+        +id : int PRIMARY_KEY
+        +record_id : int FOREIGN_KEY
+        +student_id : int FOREIGN_KEY
+        +status : enum
+        +remarks : str
+        --
+        status: PRESENT, ABSENT, LATE, EXCUSED
+    }
+}
+
+' ==================== RELATIONSHIPS ====================
+
+User "1" -- "0..1" StudentProfile : has >
+User "1" -- "*" ClassAssignment : manages >
+User "1" -- "*" GatePass : requests >
+User "1" -- "*" GatePass : approves >
+User "1" -- "*" GateLog : records >
+User "1" -- "*" AttendanceRecord : uploads >
+User "1" -- "*" AttendanceEntry : references >
+
+GatePass "1" -- "*" GateLog : has >
+AttendanceRecord "1" -- "*" AttendanceEntry : contains >
+
+' ==================== API ENDPOINTS ====================
+
+package "API Endpoints" {
+    note as AuthEndpoints
+        **Authentication**
+        POST /api/auth/login/
+        POST /api/auth/logout/
+        GET /api/auth/profile/
+        POST /api/auth/register/student/
+        POST /api/auth/register/staff/
+        POST /api/auth/register/security/
+    end note
+
+    note as GatePassEndpoints
+        **Gate Pass**
+        POST /api/gate-pass/create/
+        GET /api/gate-pass/list/
+        GET /api/gate-pass/{id}/
+        POST /api/gate-pass/{id}/approve/
+        POST /api/gate-pass/{id}/reject/
+        POST /api/gate-pass/{id}/mark-out/
+        POST /api/gate-pass/{id}/mark-in/
+        GET /api/gate-pass/scan/?token=
+    end note
+
+    note as AdminEndpoints
+        **Admin/Management**
+        GET/POST /api/class-assignments/
+        POST /api/bulk-upload/users/
+        POST /api/bulk-upload/students/
+        GET /api/analytics/summary/
+        POST /api/attendance/upload/
+        GET /api/attendance/status/
+    end note
+}
+
+@enduml

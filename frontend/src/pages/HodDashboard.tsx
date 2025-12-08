@@ -30,11 +30,17 @@ export function HodDashboard() {
     const fetchPasses = async () => {
         try {
             setIsLoading(true);
-            const response = await gatePassAPI.list();
-            const pendingPasses = response.data.filter((p: GatePass) => p.status === 'pending');
-            setPasses(pendingPasses);
+            setError('');
+            // Use pending endpoint for staff to get only pending passes that need approval
+            const response = await gatePassAPI.pending();
+            setPasses(response.data);
         } catch (err: any) {
-            setError('Failed to load gate passes');
+            console.error('Dashboard error:', err);
+            if (err.response?.status === 403) {
+                setError('You do not have permission to approve gate passes.');
+            } else {
+                setError(err.response?.data?.error || 'Failed to load gate passes');
+            }
         } finally {
             setIsLoading(false);
         }

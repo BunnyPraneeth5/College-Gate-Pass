@@ -102,7 +102,9 @@ class GatePassListSerializer(serializers.ModelSerializer):
     class Meta:
         model = GatePass
         fields = ['id', 'student', 'pass_type', 'reason', 'out_datetime', 
-                  'in_datetime', 'status', 'approved_by', 'created_at']
+                  'in_datetime', 'status', 'approved_by', 'approver_comment',
+                  'qr_token', 'created_at']
+
 
 
 class GatePassDetailSerializer(serializers.ModelSerializer):

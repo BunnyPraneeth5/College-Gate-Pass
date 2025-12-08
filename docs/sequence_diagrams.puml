@@ -1,0 +1,80 @@
+@startuml College Gate Pass - Sequence Diagrams
+
+title Gate Pass System - Key User Flows
+
+' ==================== STUDENT CREATES PASS ====================
+newpage Student Creates Gate Pass
+
+actor Student
+participant "Frontend" as FE
+participant "Django API" as API
+database "Database" as DB
+
+Student -> FE : Fill pass request form
+FE -> API : POST /api/gate-pass/create/
+API -> API : Validate data
+API -> DB : Create GatePass (status=pending)
+API -> DB : Generate QR token
+API --> FE : 201 Created + pass details
+FE --> Student : Show success message
+
+' ==================== HOD APPROVES PASS ====================
+newpage HOD Approves Gate Pass
+
+actor HOD
+participant "Frontend" as FE
+participant "Django API" as API
+participant "Notifications" as NOTIF
+database "Database" as DB
+
+HOD -> FE : View pending passes
+FE -> API : GET /api/gate-pass/list/?status=pending
+API -> DB : Query passes by department
+API --> FE : Return pending passes
+FE --> HOD : Display pass cards
+
+HOD -> FE : Click "Approve"
+FE -> API : POST /api/gate-pass/{id}/approve/
+API -> DB : Update status=approved
+API -> NOTIF : send_pass_notification()
+NOTIF -> NOTIF : Send email to student
+NOTIF -> NOTIF : Send email to parent (if hosteller)
+API --> FE : 200 OK + updated pass
+FE --> HOD : Remove from pending list
+
+' ==================== SECURITY SCANS QR ====================
+newpage Security Scans QR Code
+
+actor Security
+actor Student
+participant "Frontend" as FE
+participant "Django API" as API
+participant "Notifications" as NOTIF
+database "Database" as DB
+
+Student -> Security : Show QR code
+Security -> FE : Scan QR code
+FE -> API : GET /api/gate-pass/scan/?token=ABC123
+API -> DB : Find pass by qr_token
+API --> FE : Return pass details
+FE --> Security : Show student info + pass status
+
+Security -> FE : Click "Mark EXIT"
+FE -> API : POST /api/gate-pass/{id}/mark-out/
+API -> DB : Create GateLog (action=OUT)
+API -> NOTIF : send_pass_notification('out')
+NOTIF -> NOTIF : Send exit notification
+API --> FE : 200 OK
+FE --> Security : Show "Exit marked"
+
+note over Security, Student : Later, student returns...
+
+Security -> FE : Click "Mark ENTRY"
+FE -> API : POST /api/gate-pass/{id}/mark-in/
+API -> DB : Create GateLog (action=IN)
+API -> DB : Update status=used
+API -> NOTIF : send_pass_notification('in')
+API --> FE : 200 OK
+FE --> Security : Show "Pass completed"
+
+@enduml
